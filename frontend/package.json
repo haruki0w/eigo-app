@@ -1,0 +1,19 @@
+{
+  "name": "eigo-learning-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview"
+  },
+  "devDependencies": {
+    "@nuxt/devtools": "latest",
+    "nuxt": "^3.8.0"
+  },
+  "dependencies": {
+    "@nuxtjs/tailwindcss": "^6.8.4"
+  }
+}
+
