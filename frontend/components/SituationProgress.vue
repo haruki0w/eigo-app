@@ -24,7 +24,20 @@ const props = defineProps<{
 const { getProgress } = useProgress()
 const progress = computed(() => getProgress(props.situationId))
 const completedCount = computed(() => progress.value?.completedPhrases.length || 0)
-const totalCount = computed(() => 7) // 各シチュエーションの平均フレーズ数
+
+// 実データ件数で合計を表示（バックエンド優先、失敗時は既定値）
+const totalCount = ref<number>(7)
+onMounted(async () => {
+  try {
+    const res = await $fetch<{ data: { english: string; japanese: string }[] }>(
+      `/api/situations/${props.situationId}`
+    )
+    totalCount.value = Array.isArray(res?.data) ? res.data.length : 7
+  } catch {
+    totalCount.value = 7
+  }
+})
+
 const percentage = computed(() => {
   if (totalCount.value === 0) return 0
   return Math.round((completedCount.value / totalCount.value) * 100)

@@ -16,7 +16,7 @@
       <div class="bg-indigo-50 rounded-lg p-6">
         <div class="text-center mb-4">
           <div class="flex items-center justify-center gap-2 mb-2">
-            <p class="text-2xl font-semibold text-indigo-800">
+            <p v-if="showEnglish" class="text-2xl font-semibold text-indigo-800">
               {{ currentPhrase.english }}
             </p>
             <span
@@ -28,6 +28,46 @@
             </span>
           </div>
           <p class="text-lg text-gray-600">{{ currentPhrase.japanese }}</p>
+          <div class="mt-3">
+            <button
+              @click="showEnglish = !showEnglish"
+              class="text-sm text-indigo-600 hover:text-indigo-800 underline"
+            >
+              {{ showEnglish ? '英文を隠す' : '英文を表示' }}
+            </button>
+          </div>
+          <div v-if="currentPhrase.answers && currentPhrase.answers.length" class="mt-2">
+            <button
+              @click="showAnswers = !showAnswers"
+              class="text-sm text-indigo-600 hover:text-indigo-800 underline"
+            >
+              {{ showAnswers ? '返答を隠す' : '返答を表示' }}
+            </button>
+          </div>
+          <div v-if="currentPhrase.answers && currentPhrase.answers.length" class="mt-4 text-left">
+            <p class="text-sm text-gray-700 font-medium mb-1">例: 返答</p>
+            <ul class="text-gray-700 text-sm space-y-2">
+              <li
+                v-for="ans in currentPhrase.answers"
+                :key="ans.english"
+                class="flex flex-col gap-1"
+              >
+                <div class="flex items-center gap-2">
+                  <span class="flex-1">{{ ans.japanese }}</span>
+                  <button
+                    @click="playText(ans.english)"
+                    class="px-2 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                    title="返答を再生"
+                  >
+                    🔊 再生
+                  </button>
+                </div>
+                <p v-if="showAnswers" class="text-xs text-gray-600 ml-6">
+                  {{ ans.english }}
+                </p>
+              </li>
+            </ul>
+          </div>
         </div>
 
         <!-- 音声設定＆再生 -->
@@ -129,6 +169,37 @@
           次へ →
         </button>
       </div>
+
+      <!-- フレーズ進捗トラッカー -->
+      <div class="mt-4">
+        <div class="flex flex-wrap items-center justify-center gap-2">
+          <button
+            v-for="(p, idx) in situation.phrases"
+            :key="idx"
+            @click="goToIndex(idx)"
+            :class="[
+              'w-8 h-8 rounded-full flex items-center justify-center text-sm transition',
+              completedPhrases.includes(idx) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700',
+              idx === currentIndex ? 'ring-2 ring-indigo-500 ring-offset-2' : ''
+            ]"
+            :title="(idx + 1) + ' / ' + situation.phrases.length"
+          >
+            <span v-if="completedPhrases.includes(idx)">✓</span>
+            <span v-else>{{ idx + 1 }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 最終フレーズでの完了ボタン -->
+      <div v-if="isLast" class="mt-6 flex justify-center">
+        <button
+          @click="completeSituation"
+          :disabled="allCompleted"
+          class="px-6 py-2 rounded-lg text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {{ allCompleted ? '✅ 完了済み' : '✅ このセクションを完了' }}
+        </button>
+      </div>
     </div>
 
     <div v-else class="text-center py-8 text-gray-500">
@@ -138,10 +209,16 @@
 </template>
 
 <script setup lang="ts">
+interface Answer {
+  english: string
+  japanese: string
+}
+
 interface Phrase {
   english: string
   japanese: string
   audio?: string
+  answers?: Answer[]
 }
 
 interface Situation {
@@ -167,6 +244,10 @@ const transcription = ref('')
 const accuracy = ref<number | null>(null)
 const progress = computed(() => getProgress(props.situation.id))
 const completedPhrases = computed(() => progress.value?.completedPhrases || [])
+const showEnglish = ref(false)
+const showAnswers = ref(false)
+const isLast = computed(() => currentIndex.value === props.situation.phrases.length - 1)
+const allCompleted = computed(() => completedPhrases.value.length >= props.situation.phrases.length)
 let recognition: any = null
 let mediaRecorder: MediaRecorder | null = null
 let mediaStream: MediaStream | null = null
@@ -229,11 +310,9 @@ onMounted(() => {
   }
 })
 
-const playAudio = () => {
-  if (!currentPhrase.value) return
-  
-  // Web Speech APIで音声合成
-  const utterance = new SpeechSynthesisUtterance(currentPhrase.value.english)
+const playText = (text: string) => {
+  if (!text) return
+  const utterance = new SpeechSynthesisUtterance(text)
   utterance.lang = 'en-US'
   utterance.rate = 0.9
   const chosen =
@@ -243,6 +322,12 @@ const playAudio = () => {
     utterance.voice = chosen
   }
   window.speechSynthesis.speak(utterance)
+}
+
+const playAudio = () => {
+  if (!currentPhrase.value) return
+  // Web Speech APIで音声合成（現在の英文）
+  playText(currentPhrase.value.english)
 }
 
 const toggleRecording = () => {
@@ -336,6 +421,8 @@ const nextPhrase = () => {
     currentIndex.value++
     transcription.value = ''
     accuracy.value = null
+    showEnglish.value = false
+    showAnswers.value = false
   }
 }
 
@@ -344,6 +431,25 @@ const previousPhrase = () => {
     currentIndex.value--
     transcription.value = ''
     accuracy.value = null
+    showEnglish.value = false
+    showAnswers.value = false
+  }
+}
+
+const goToIndex = (idx: number) => {
+  if (idx < 0 || idx >= props.situation.phrases.length) return
+  currentIndex.value = idx
+  transcription.value = ''
+  accuracy.value = null
+  showEnglish.value = false
+  showAnswers.value = false
+}
+
+function completeSituation() {
+  const total = props.situation.phrases.length
+  for (let i = 0; i < total; i++) {
+    // saveProgress 去重されるため、既に完了済みのインデックスは重複登録されない
+    saveProgress(props.situation.id, i)
   }
 }
 
